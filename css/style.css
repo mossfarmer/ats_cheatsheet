@@ -250,6 +250,85 @@ table.data-table > * > tr:hover {
     background-color: var(--ats-gold); /* Highlight row on hover */
 }
 
+/* Category group headers when the table is grouped by category */
+table.data-table > tbody > tr.category-row,
+table.data-table > tbody > tr.category-row:nth-child(odd),
+table.data-table > tbody > tr.category-row:hover {
+    background-color: var(--ats-color-blue-unfilled-resolve);
+}
+
+.data-table .category-row td {
+    color: var(--ats-yellow, gold);
+    font-size: 120%;
+    font-variant: small-caps;
+    letter-spacing: 1px;
+    padding: 4px 8px;
+}
+
+/* Species affinity picker above the buildings table */
+.affinity-picker {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 8px 0 4px 0;
+}
+
+.affinity-label {
+    color: var(--ats-yellow, gold);
+    margin-right: 6px;
+}
+
+.affinity-picker .affinity-portrait {
+    width: 42px;
+    height: 42px;
+    cursor: pointer;
+    opacity: 0.45;
+    border: 2px solid transparent;
+    border-radius: 4px;
+}
+
+.affinity-picker .affinity-portrait:hover {
+    opacity: 0.8;
+}
+
+.affinity-picker .affinity-portrait.affinity-active {
+    opacity: 1;
+    border-color: var(--ats-gold, gold);
+}
+
+/* Mini species portraits next to products a selected species needs */
+.data-table td > * > img.liked-badge {
+    width: 20px;
+    height: 20px;
+    margin-left: 4px;
+    vertical-align: middle;
+    border-radius: 3px;
+    border-image: none;
+    border-width: 0;
+    cursor: default;
+}
+
+.affinity-score {
+    float: right;
+    color: var(--ats-yellow, gold);
+    font-weight: bold;
+    margin: 0 8px;
+}
+
+/* Worker proficiency marker (10% double yield) next to the building name */
+.prof-badge {
+    color: var(--ats-yellow, gold);
+    margin-left: 8px;
+    white-space: nowrap;
+}
+
+.affinity-hint {
+    margin: 12px 4px;
+    font-style: italic;
+    opacity: 0.85;
+}
+
 /* Icons */
 
 .ats-optional-ingredient-icon > a {
