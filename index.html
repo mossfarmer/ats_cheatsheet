@@ -771,6 +771,7 @@
 			// Best buildings for the species selected in the Species Needs grid above
 			const BestBuildings = () => {
 				const [species, setSpecies] = useState(window.currentSpeciesSelection || []);
+				const [includeFlawless, setIncludeFlawless] = useState(false);
 
 				useEffect(() => {
 					const handler = (e) => setSpecies(e.detail || []);
@@ -789,7 +790,8 @@
 				};
 
 				const ranked = FORMATTED_BUILDINGS
-					.filter(item => hasLikedProduct(item, species) || proficientSpecies(item, species).length > 0)
+					.filter(item => (includeFlawless || !item.id.startsWith('Flawless '))
+						&& (hasLikedProduct(item, species) || proficientSpecies(item, species).length > 0))
 					.sort((a, b) =>
 						affinityScore(b, species) - affinityScore(a, species)
 						|| proficientSpecies(b, species).length - proficientSpecies(a, species).length
@@ -808,6 +810,13 @@
 										className={`affinity-portrait${species.includes(s) ? ' affinity-active' : ''}`}
 										onClick={() => toggleSpecies(s)} />
 								))}
+								<button type="button"
+									aria-pressed={includeFlawless}
+									title="Include rare Flawless buildings in the rankings"
+									className={includeFlawless ? 'cat-active' : 'cat-inactive'}
+									onClick={() => setIncludeFlawless(current => !current)}>
+									Include Flawless
+								</button>
 							</div>
 							{species.length === 0 ?
 								<div className="affinity-hint">Select up to 3 species (here or in the Species Needs grid) to rank buildings by how well their products and worker bonuses match those species.</div>
