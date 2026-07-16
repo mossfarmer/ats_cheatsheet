@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Against the Storm Cheatsheet</title>
     <link rel="icon" href="img/ats.ico"/>
-	<link rel="stylesheet" href="css/style.css">
+	<link rel="stylesheet" href="css/style.css?v=1.8-bats">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/js/all.min.js"></script>
     <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
     <script crossorigin src="https://unpkg.com/@babel/standalone@7.29.7/babel.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/react-beautiful-dnd@13.1.1/dist/react-beautiful-dnd.min.js"></script>
-    <script type="text/javascript" src="js/goods.json"></script>
-	<script type="text/javascript" src="js/buildings.json"></script>
+    <script type="text/javascript" src="js/goods.json?v=1.8-bats"></script>
+	<script type="text/javascript" src="js/buildings.json?v=1.8-bats"></script>
 </head>
 <body>
     <div class="content">
@@ -46,7 +46,8 @@
                 'Harpy': ['Jerky', 'Education', 'Coats', 'Treatment', 'Boots', 'Paste'],
                 'Lizard': ['Jerky', 'Pickled Goods', 'Pie', 'Skewers', 'Brawling', 'Boots'],
                 'Fox': ['Porridge', 'Pickled Goods', 'Treatment', 'Skewers', 'Religion', 'Boots'],
-				'Frog': ['Porridge', 'Pie', 'Brawling', 'Religion', 'Luxury', 'Boots', 'Paste']
+				'Frog': ['Porridge', 'Pie', 'Brawling', 'Religion', 'Luxury', 'Boots', 'Paste'],
+				'Bat': ['Biscuits', 'Paste', 'Skewers', 'Coats', 'Brawling', 'Education']
             }
 			const overlappingNeeds = {};
 			for (const species in SPECIES) {
@@ -65,6 +66,7 @@
                 'Lizard': 'img/species/Lizard_Portrait.png',
                 'Fox': 'img/species/Fox_Portrait.png',
 				'Frog': 'img/species/Frog_Portrait.png',
+				'Bat': 'img/species/Bat_Portrait.png',
                 'Biscuits': 'img/goods/Icon_Resource_Biscuits.png',
                 'Pie': 'img/goods/Icon_Resource_Pie.png',
                 'Porridge': 'img/goods/Icon_Resource_Porridge.png',
@@ -81,6 +83,100 @@
 				'Boots': 'img/goods/Icon_Resource_Boots_1.png',
 				'Paste': 'img/needs/Icon_Resource_Paste.png'
             }
+
+            // --- Species affinity helpers (shared by NeedsGrid + BestBuildings) ---
+
+            // Proficiency: 10% double-yield chance for a species working in a tagged
+            // building. Fox "Forest" applies to glade events only, never buildings.
+            const SPECIES_PROFICIENCY = {
+                'Human': 'Farming',
+                'Beaver': 'Woodworking',
+                'Lizard': 'Meat production',
+                'Harpy': 'Alchemy',
+                'Fox': 'Forest',
+                'Frog': 'Masonry',
+                'Bat': 'Metallurgy'
+            };
+
+            const gradeStars = (grade) => grade ? (grade.split('★').length - 1) : 0;
+
+            // Species in speciesList whose needs this product fulfills (foods/clothing
+            // match directly; services match by need name or its consumed good)
+            const productLikedBy = (productName, speciesList) => speciesList.filter(s =>
+                SPECIES[s].includes(productName) || SPECIES[s].some(need => NEEDTRANS[need] === productName)
+            );
+
+            const proficientSpecies = (item, speciesList) => speciesList.filter(s =>
+                item.proficiencyTags.includes(SPECIES_PROFICIENCY[s])
+            );
+
+            // Higher = the building's output better matches the species' needs:
+            // each liked product scores (species that want it) x (1 + recipe stars);
+            // the base 1 means even a no-star recipe counts for fulfilling the need
+            const affinityScore = (item, speciesList) => item.products.reduce((sum, p) => {
+                const liked = productLikedBy(p.name, speciesList).length;
+                return sum + liked * (1 + gradeStars(p.grade));
+            }, 0);
+
+            // Whether any product fulfills a need of the given species
+            const hasLikedProduct = (item, speciesList) =>
+                item.products.some(p => productLikedBy(p.name, speciesList).length > 0);
+
+            // Human-readable per-product breakdown of the score, for the tooltip
+            const affinityBreakdown = (item, speciesList) => {
+                const lines = item.products
+                    .map(p => ({ p, liked: productLikedBy(p.name, speciesList) }))
+                    .filter(x => x.liked.length > 0)
+                    .map(({ p, liked }) => {
+                        const stars = gradeStars(p.grade);
+                        const mult = 1 + stars;
+                        return `${p.name}: wanted by ${liked.join(', ')} (${liked.length}) × ${mult} (${stars}★ + 1 base) = ${liked.length * mult}`;
+                    });
+                lines.push(`Total: ${affinityScore(item, speciesList)}`);
+                return lines.join('\n');
+            };
+
+            // --- Building table data, built once and shared ---
+            const buildFormattedBuildings = () => {
+                const formattedBuildings = [];
+                const per_cat = {};
+                for (const building in BUILDINGS) {
+                    if (BUILDINGS[building]["category"] in per_cat) {
+                        per_cat[BUILDINGS[building]["category"]].push(building);
+                    } else {
+                        per_cat[BUILDINGS[building]["category"]] = [building];
+                    }
+                    // building products
+                    var products = [];
+                    for (const rec in BUILDINGS[building]["recipes"]) {
+                        var n = BUILDINGS[building]["recipes"][rec]["product"]["name"];
+                        if (n in NEEDTRANS) n = NEEDTRANS[n];
+                        BUILDINGS[building]["recipes"][rec]["product"]["icon_path"] = GOODS[n]["icon_path"];
+                        BUILDINGS[building]["recipes"][rec]["product"]["grade"] = BUILDINGS[building]["recipes"][rec]["grade"];
+                        products.push(BUILDINGS[building]["recipes"][rec]["product"]);
+                    }
+
+                    // building costs
+                    var cost = [];
+                    for (const req in BUILDINGS[building]["requiredGoods"]) {
+                        var n = BUILDINGS[building]["requiredGoods"][req]["name"];
+                        var reqGood = GOODS[n];
+                        cost.push({"amount": BUILDINGS[building]["requiredGoods"][req]["amount"], "icon_path": reqGood["icon_path"], "name": reqGood["displayName"]});
+                    }
+
+                    formattedBuildings.push({
+                        building: BUILDINGS[building].displayName,
+                        icon: BUILDINGS[building].icon,
+                        products: products,
+                        cost: cost,
+                        id: building,
+                        category: BUILDINGS[building].category,
+                        proficiencyTags: BUILDINGS[building].proficiencyTags || [],
+                    });
+                }
+                return { formattedBuildings, per_cat };
+            };
+            const { formattedBuildings: FORMATTED_BUILDINGS, per_cat: PER_CAT } = buildFormattedBuildings();
 
             // Ingredients
             const IngredientGrid = ({ rows, columns }) => {
@@ -226,6 +322,10 @@
                         setActiveSpecies(newActiveSpecies);
                     }
                     highlightNeeds(newActiveSpecies);
+
+                    // Broadcast for the Best Buildings tab (separate React tree)
+                    window.currentSpeciesSelection = newActiveSpecies ? [...newActiveSpecies] : [];
+                    window.dispatchEvent(new CustomEvent('speciesSelection', { detail: window.currentSpeciesSelection }));
                 };
 
                 const highlightNeeds = (newActiveSpecies) => {
@@ -274,7 +374,7 @@
                 }
 
                 return (
-                    <div className="ats-container icon-grid" style={{maxWidth: '510px'}}>
+                    <div className="ats-container icon-grid" style={{maxWidth: '590px'}}>
                         <div className="grid-header ats-infobox-header-title">
                             {"Species Needs"}
                         </div>
@@ -317,48 +417,10 @@
 			
 			// Buildings data table
 			const DataTable = () => {
-				const formattedBuildings = [];
-				const per_cat = {};
-				for (const building in BUILDINGS) {
-					if (BUILDINGS[building]["category"] in per_cat) {
-						per_cat[BUILDINGS[building]["category"]].push(building);
-					} else {
-						per_cat[BUILDINGS[building]["category"]] = [building];
-					}
-					// building products
-					var products = [];
-					for (const rec in BUILDINGS[building]["recipes"]) {
-						var n = BUILDINGS[building]["recipes"][rec]["product"]["name"];
-						if (n in NEEDTRANS) n = NEEDTRANS[n];
-						BUILDINGS[building]["recipes"][rec]["product"]["icon_path"] = GOODS[n]["icon_path"];
-						BUILDINGS[building]["recipes"][rec]["product"]["grade"] = BUILDINGS[building]["recipes"][rec]["grade"];
-						products.push(BUILDINGS[building]["recipes"][rec]["product"]);
-					}
-				
-					// building costs
-					var cost = [];
-					for (const req in BUILDINGS[building]["requiredGoods"]) {
-						var n = BUILDINGS[building]["requiredGoods"][req]["name"];
-						var reqGood = GOODS[n];
-						cost.push({"amount": BUILDINGS[building]["requiredGoods"][req]["amount"], "icon_path": reqGood["icon_path"], "name": reqGood["displayName"]});
-					}
-					
-					// format building info
-					const formattedBuilding = {
-						building: BUILDINGS[building].displayName,
-						icon: BUILDINGS[building].icon,
-						products: products,
-						cost: cost,
-						id: building,
-						category: BUILDINGS[building].category,
-					};
-
-					formattedBuildings.push(formattedBuilding);
-				}
-			
-				const [data, setData] = useState(formattedBuildings);
+				const per_cat = PER_CAT;
+				const [data, setData] = useState(FORMATTED_BUILDINGS);
 				const [searchTerm, setSearchTerm] = useState('');
-				const [sortKey, setSortKey] = useState(null);
+				const [sortKey, setSortKey] = useState('category');
 				const [sortDirection, setSortDirection] = useState('asc');
 				const [activeCats, setActiveCats] = useState(Object.keys(per_cat));
 				const [activeFilts, setActiveFilts] = useState(["Products"]);
@@ -371,9 +433,9 @@
 					if (sortKey === key) {
 						if (sortDirection === 'asc') {
 							setSortDirection('desc');
-						} else if (sortDirection === 'desc') {
-							setSortDirection(null); // Reset to default (no sorting)
 						} else {
+							// Reset to the default category grouping
+							setSortKey('category');
 							setSortDirection('asc');
 						}
 					} else {
@@ -394,8 +456,13 @@
 
 					if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
 					if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+					// Tie-break by building name so groups stay alphabetized
+					if (a.building < b.building) return -1;
+					if (a.building > b.building) return 1;
 					return 0;
 				});
+
+				const isGrouped = sortKey === 'category' && sortDirection !== null;
 				
 				const handleFilter = (filterCat) => {
 					if (filterCat === "Costs" || filterCat === "Products") {
@@ -442,7 +509,7 @@
 					if (activeCats.indexOf(item.category) == -1) {
 						return false;
 					}
-					
+
 					var cost = JSON.stringify(item.cost);
 					var products = JSON.stringify(item.products);
 					if (activeFilts.indexOf("Costs") == -1) {
@@ -458,7 +525,6 @@
 					
 					return searchString.includes(searchTerm.toLowerCase());
 				});
-
 
 				return (
 					<div className="ats-container icon-grid" style={{ minWidth: '850px' }}>
@@ -501,7 +567,13 @@
 								</thead>
 								<tbody>
 									{filteredData.map((item, index) => (
-										<tr key={item.id}>
+										<React.Fragment key={item.id}>
+										{isGrouped && (index === 0 || filteredData[index - 1].category !== item.category) &&
+											<tr className="category-row">
+												<td colSpan="3">{item.category}</td>
+											</tr>
+										}
+										<tr>
 											<td>
 												<img src={item.icon} alt={item.building} style={{ maxWidth: '60px', maxHeight: '60px', margin: '10px' }} />
 												{item.building}
@@ -517,6 +589,7 @@
 												))}
 											</td>
 										</tr>
+										</React.Fragment>
 									))}
 								</tbody>
 							</table>
@@ -529,7 +602,7 @@
 			const DraggableContainer = () => {
 				const [items, setItems] = useState([
 					{ id: "ingredients", content: <IngredientGrid rows={9} columns={8} /> },
-					{ id: "needs", content: <NeedsGrid rows={4} columns={6} /> },
+					{ id: "needs", content: <NeedsGrid rows={4} columns={7} /> },
 				]);
 
 				const [direction, setDirection] = useState("horizontal");
@@ -657,7 +730,7 @@
 					grid.push(row);
                 }
 				return (
-				  <div className="ats-container icon-grid" style={{ maxWidth: '750px' }}>
+				  <div className="ats-container icon-grid" style={{ minWidth: '740px', maxWidth: '800px' }}>
 					<div className="grid-header ats-infobox-header-title">
 					  {"Species Needs Overlap"}
 					</div>
@@ -694,10 +767,112 @@
             };
 			
 			ReactDOM.render(<DraggableContainer />, document.querySelector("#block_1"));
-			
+
+			// Best buildings for the species selected in the Species Needs grid above
+			const BestBuildings = () => {
+				const [species, setSpecies] = useState(window.currentSpeciesSelection || []);
+				const [includeFlawless, setIncludeFlawless] = useState(false);
+
+				useEffect(() => {
+					const handler = (e) => setSpecies(e.detail || []);
+					window.addEventListener('speciesSelection', handler);
+					return () => window.removeEventListener('speciesSelection', handler);
+				}, []);
+
+				// Toggle through the Species Needs grid so both stay in sync
+				const toggleSpecies = (name) => {
+					const gridIcon = document.getElementById(name);
+					if (gridIcon) gridIcon.click();
+				};
+
+				const handleIconClick = (iconName) => {
+					document.getElementById(iconName).click();
+				};
+
+				const ranked = FORMATTED_BUILDINGS
+					.filter(item => (includeFlawless || !item.id.startsWith('Flawless '))
+						&& (hasLikedProduct(item, species) || proficientSpecies(item, species).length > 0))
+					.sort((a, b) =>
+						affinityScore(b, species) - affinityScore(a, species)
+						|| proficientSpecies(b, species).length - proficientSpecies(a, species).length
+						|| (a.building < b.building ? -1 : a.building > b.building ? 1 : 0));
+
+				return (
+					<div className="ats-container icon-grid" style={{ minWidth: '850px' }}>
+						<div className="grid-header ats-infobox-header-title">
+							{"Best Buildings"}
+						</div>
+						<div className="icon-grid-wrapper">
+							<div className="affinity-picker">
+								<span className="affinity-label" title="Buildings ranked by how well their output matches the selected species' needs. Follows the selection in the Species Needs grid above.">Species:</span>
+								{Object.keys(SPECIES).map(s => (
+									<img key={s} src={SPECIES_ICONS[s]} alt={s} title={s}
+										className={`affinity-portrait${species.includes(s) ? ' affinity-active' : ''}`}
+										onClick={() => toggleSpecies(s)} />
+								))}
+								<button type="button"
+									aria-pressed={includeFlawless}
+									title="Include rare Flawless buildings in the rankings"
+									className={includeFlawless ? 'cat-active' : 'cat-inactive'}
+									onClick={() => setIncludeFlawless(current => !current)}>
+									Include Flawless
+								</button>
+							</div>
+							{species.length === 0 ?
+								<div className="affinity-hint">Select up to 3 species (here or in the Species Needs grid) to rank buildings by how well their products and worker bonuses match those species.</div>
+							:
+								<table className="data-table">
+									<thead>
+										<tr>
+											<th>Building</th>
+											<th>Products</th>
+											<th>Building Cost</th>
+										</tr>
+									</thead>
+									<tbody>
+										{ranked.map(item => (
+											<tr key={item.id}>
+												<td>
+													<img src={item.icon} alt={item.building} style={{ maxWidth: '60px', maxHeight: '60px', margin: '10px' }} />
+													{item.building}
+													<span className="affinity-score" title={affinityBreakdown(item, species)}>{affinityScore(item, species)}</span>
+													{proficientSpecies(item, species).length > 0 &&
+														<span className="prof-badge" title={proficientSpecies(item, species).map(s => `${s} proficiency (${SPECIES_PROFICIENCY[s]}): 10% chance of double yield`).join('\n')}>
+															{'⚒ '}
+															{proficientSpecies(item, species).map(s => (
+																<img key={s} src={SPECIES_ICONS[s]} alt={s} className="liked-badge"/>
+															))}
+														</span>
+													}
+												</td>
+												<td>
+													{item.products.map((productItem, productIndex) => (
+													  <div key={productIndex}><img onClick={() => handleIconClick(productItem.name)} alt={productItem.name} src={productItem.icon_path} width="30" height="30"/> {productItem.name} {productItem.grade ? "(" + productItem.grade + ")" : ""}
+														{productLikedBy(productItem.name, species).map(s => (
+															<img key={s} src={SPECIES_ICONS[s]} alt={s} title={`${s}s need this`} className="liked-badge"/>
+														))}
+													  </div>
+													))}
+												</td>
+												<td>
+													{item.cost.map((costItem, costIndex) => (
+													  <div key={costIndex}>{costItem.amount} <img alt={costItem.name} onClick={() => handleIconClick(costItem.name)} src={costItem.icon_path} width="30" height="30"/> {costItem.name}</div>
+													))}
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							}
+						</div>
+					</div>
+				);
+			};
+
 			const TABS = [
 				{ id: 'buildings-table', label: 'Buildings', content: <DataTable /> },
 				{ id: 'overlapping-needs', label: 'Needs Info', content: <OverlappingNeeds /> },
+				{ id: 'best-buildings', label: 'Best Buildings', content: <BestBuildings /> },
 			];
 
 			const TabsComponent = () => {
